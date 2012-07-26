@@ -17,60 +17,12 @@ class jason : Application
             break;
           input.Add(~line);
         }
-        var output = ProcessJson(input);
-        WriteLine(output);
+        ValidateJson(input);
       }
     }
   }
-
-
-  int line = 1;
-  int offset = 1;
-  Stack<int> stateStack = new();
-  List<String> stream = new();
-  int mode = 0;
-  int idx = 0;
-  StringBuilder output = new();
-  int indentDepth = 0;
-  bool needsIndent = true;
   
-  
-  void Token(String text)
-  {
-    if (needsIndent)
-    {
-      if (indentDepth > 0)
-        output.Append("".PadLeft(" ", indentDepth*2));
-    }
-    else
-      output.Append(" ");
-    needsIndent = false;
-    output.Append(text);
-  }
-  
-  void TokenNoSpace(String text)
-  {
-    if (needsIndent)
-    {
-      if (indentDepth > 0)
-        output.Append("".PadLeft(" ", indentDepth*2));
-    }
-    needsIndent = false;
-    output.Append(text);
-  }
-  
-  void Raw(String text)
-  {
-    output.Append(text);
-  }
-
-  void Line()
-  {
-    output.Append("\n");
-    needsIndent = true;
-  }
-  
-  String ProcessJson(List<String> input)
+  void ValidateJson(List<String> input)
   {
     StringBuilder sb = new();
     for (var line in input)
@@ -79,16 +31,12 @@ class jason : Application
       sb.Append("\n");
     }
     
-    line = 1;
-    offset = 1;
-    stateStack = new();
-    stream = new(sb.ToString().Characters);
-    mode = 0;
-    idx = 0;
-    output = new();
-    indentDepth = 0;
-    needsIndent = true;
-
+    int line = 1;
+    int offset = 1;
+    Stack<int> stateStack = new();
+    List<String> stream = new(sb.ToString().Characters);
+    int mode = 0;
+    int idx = 0;
     while(true)
     {
       if (idx == stream.Count)
@@ -114,25 +62,22 @@ class jason : Application
           idx = idx + 1;
           offset = 1;
           line = line + 1;
-          Line();
           continue;
         }
         if (stream[idx] == "#")
         {
-          Token("");
           stateStack.Push(mode);
           mode = 1;
           continue;
         }
       }
+//      Console.WriteLine("mode: "+mode+" Char: "+stream[idx]+" Line: "+line+" Offset: "+offset);
 
       if (mode == 0)
       {
         //initial mode
         if (stream[idx] == "{")
         {
-          Token("{");
-          indentDepth = indentDepth + 1;
           stateStack.Push(2);
           mode = 3;
           idx = idx + 1;
@@ -142,8 +87,6 @@ class jason : Application
         }
         if (stream[idx] == "[")
         {
-          Token("[");
-          indentDepth = indentDepth + 1;
           stateStack.Push(2);
           mode = 4;
           idx = idx + 1;
@@ -159,14 +102,12 @@ class jason : Application
         // comment line
         if (stream[idx] == "\n")
         {
-          Line();
           idx = idx + 1;
           offset = 1;
           line = line + 1;
           mode = stateStack.Pop();
           continue;
         }
-        Raw(stream[idx]);
         idx = idx + 1;
         offset = offset + 1;
         continue;
@@ -181,8 +122,6 @@ class jason : Application
         // object mode
         if (stream[idx] == "}")
         {
-          indentDepth = indentDepth - 1;
-          Token("}");
           idx = idx + 1;
           offset = offset + 1;
           mode = stateStack.Pop();
@@ -200,7 +139,6 @@ class jason : Application
       {
         if (stream[idx] == ":")
         {
-          TokenNoSpace(":");
           idx = idx + 1;
           offset = offset + 1;
           stateStack.Push(32);
@@ -213,8 +151,6 @@ class jason : Application
       {
         if (stream[idx] == "}")
         {
-          indentDepth = indentDepth - 1;
-          Token("}");
           idx = idx + 1;
           offset = offset + 1;
           mode = stateStack.Pop();
@@ -222,7 +158,6 @@ class jason : Application
         }
         if (stream[idx] == ",")
         {
-          TokenNoSpace(",");
           idx = idx + 1;
           offset = offset + 1;
           mode = 33;
@@ -245,8 +180,6 @@ class jason : Application
         // array mode
         if (stream[idx] == "]")
         {
-          indentDepth = indentDepth - 1;
-          Token("]");
           idx = idx + 1;
           offset = offset + 1;
           mode = stateStack.Pop();
@@ -259,8 +192,6 @@ class jason : Application
       {
         if (stream[idx] == "]")
         {
-          indentDepth = indentDepth - 1;
-          Token("]");
           idx = idx + 1;
           offset = offset + 1;
           mode = stateStack.Pop();
@@ -268,7 +199,6 @@ class jason : Application
         }
         if (stream[idx] == ",")
         {
-          TokenNoSpace(",");
           idx = idx + 1;
           offset = offset + 1;
           stateStack.Push(41);
@@ -282,8 +212,6 @@ class jason : Application
         // string mode
         if (stream[idx] == "\"")
         {
-          Token("");
-          Raw(stream[idx]);
           int startline = line;
           int startoffset = offset;
           idx = idx + 1;
@@ -293,7 +221,6 @@ class jason : Application
           {
             if (idx == stream.Count)
               throw new Exception("Unclosed string literal started at line: "+startline+" offset: "+startoffset);
-            Raw(stream[idx]);
             if (stream[idx] == "\n")
             {
               idx = idx + 1;
@@ -328,8 +255,6 @@ class jason : Application
         // value mode
         if (stream[idx] == "{")
         {
-          Token(stream[idx]);
-          indentDepth = indentDepth + 1;
           idx = idx + 1;
           offset = offset + 1;
           mode = 3;
@@ -337,8 +262,6 @@ class jason : Application
         }
         if (stream[idx] == "[")
         {
-          Token(stream[idx]);
-          indentDepth = indentDepth + 1;
           idx = idx + 1;
           offset = offset + 1;
           mode = 4;
@@ -346,7 +269,6 @@ class jason : Application
         }
         if ((stream[idx] == "t") && (idx+4 <= stream.Count) && (stream[idx+1] == "r") && (stream[idx+2] == "u") && (stream[idx+3] == "e"))
         {
-          Token("true");
           idx = idx + 4;
           offset = offset + 4;
           mode = stateStack.Pop();
@@ -354,7 +276,6 @@ class jason : Application
         }
         if ((stream[idx] == "f") && (idx+5 <= stream.Count) && (stream[idx+1] == "a") && (stream[idx+2] == "l") && (stream[idx+3] == "s") && (stream[idx+4] == "e"))
         {
-          Token("false");
           idx = idx + 5;
           offset = offset + 5;
           mode = stateStack.Pop();
@@ -362,7 +283,6 @@ class jason : Application
         }
         if ((stream[idx] == "n") && (idx+4 <= stream.Count) && (stream[idx+1] == "u") && (stream[idx+2] == "l") && (stream[idx+3] == "l"))
         {
-          Token("null");
           idx = idx + 4;
           offset = offset + 4;
           mode = stateStack.Pop();
@@ -374,12 +294,9 @@ class jason : Application
           continue;
         }
         
-        Token("");
-        
         // number
         if (stream[idx] == "-")
         {
-          Raw(stream[idx]);
           idx = idx + 1;
           offset = offset + 1;
         }
@@ -394,13 +311,11 @@ class jason : Application
           (stream[idx] == "8") ||
           (stream[idx] == "9"))
         {
-          Raw(stream[idx]);
           idx = idx + 1;
           offset = offset + 1;
         }
         if (stream[idx] == ".")
         {
-          Raw(stream[idx]);
           idx = idx + 1;
           offset = offset + 1;
           while ((stream[idx] == "0") ||
@@ -414,19 +329,16 @@ class jason : Application
             (stream[idx] == "8") ||
             (stream[idx] == "9"))
           {
-            Raw(stream[idx]);
             idx = idx + 1;
             offset = offset + 1;
           }
         }
         if ((stream[idx] == "e") || (stream[idx] == "E"))
         {
-          Raw(stream[idx]);
           idx = idx + 1;
           offset = offset + 1;
           if ((stream[idx] == "+") || (stream[idx] == "-"))
           {
-            Raw(stream[idx]);
             idx = idx + 1;
             offset = offset + 1;
           }
@@ -441,7 +353,6 @@ class jason : Application
             (stream[idx] == "8") ||
             (stream[idx] == "9"))
           {
-            Raw(stream[idx]);
             idx = idx + 1;
             offset = offset + 1;
           }
@@ -450,6 +361,5 @@ class jason : Application
         continue;
       }
     }
-    return output.ToString();
   }
 }
