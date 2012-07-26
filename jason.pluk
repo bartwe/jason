@@ -95,7 +95,7 @@ class jason : Application
       {
         if (mode == 2)
           break;
-        throw new Exception("Unexpecte end of file. mode:" + mode);
+        throw new Exception("Unexpected end of file.");
       }
       if ((mode == 0) || (mode == 2)
        || (mode == 3) || (mode == 31) || (mode == 32) || (mode == 33)
@@ -118,6 +118,13 @@ class jason : Application
           continue;
         }
         if (stream[idx] == "#")
+        {
+          Token("");
+          stateStack.Push(mode);
+          mode = 1;
+          continue;
+        }
+        if (stream[idx] == "/")
         {
           Token("");
           stateStack.Push(mode);
