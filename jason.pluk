@@ -6,10 +6,10 @@ class jason : Application
   {
     for (var x in Arguments.Skip(1))
     {
+      List<String> input = new();
       scope (var fs = new FileStream(x))
       {
         StreamReader reader = new(fs);
-        List<String> input = new();
         while (true)
         {
           var line = reader.ReadLineOrEof();
@@ -17,8 +17,13 @@ class jason : Application
             break;
           input.Add(~line);
         }
-        var output = ProcessJson(input);
-        WriteLine(output);
+      }
+      var output = ProcessJson(input);
+      File.Delete(x);
+      scope (var fs = new FileStream(x))
+      {
+        StreamWriter writer = new(fs);
+        writer.Write(output);
       }
     }
   }
@@ -33,7 +38,28 @@ class jason : Application
   StringBuilder output = new();
   int indentDepth = 0;
   bool needsIndent = true;
+  bool openedArray = false;
+  bool number = false;
   
+  void NumberWritten()
+  {
+    number = true;
+  }
+  
+  void TokenNumber(String text)
+  {
+    if (needsIndent)
+    {
+      if (indentDepth > 0)
+        output.Append("".PadLeft(" ", indentDepth*2));
+    }
+    else if (!openedArray)
+      output.Append(" ");
+    needsIndent = false;
+    output.Append(text);
+    openedArray = false;
+    number = false;
+  }
   
   void Token(String text)
   {
@@ -42,10 +68,12 @@ class jason : Application
       if (indentDepth > 0)
         output.Append("".PadLeft(" ", indentDepth*2));
     }
-    else
+    else if ((text != "]") || (!number))
       output.Append(" ");
     needsIndent = false;
     output.Append(text);
+    openedArray = (text == "[");
+    number = false;
   }
   
   void TokenNoSpace(String text)
@@ -57,17 +85,23 @@ class jason : Application
     }
     needsIndent = false;
     output.Append(text);
+    openedArray = false;
+    number = false;
   }
   
   void Raw(String text)
   {
     output.Append(text);
+    openedArray = false;
+    number = false;
   }
 
   void Line()
   {
     output.Append("\n");
     needsIndent = true;
+    openedArray = false;
+    number = false;
   }
   
   String ProcessJson(List<String> input)
@@ -207,7 +241,7 @@ class jason : Application
       {
         if (stream[idx] == ":")
         {
-          TokenNoSpace(":");
+          Token(":");
           idx = idx + 1;
           offset = offset + 1;
           stateStack.Push(32);
@@ -381,7 +415,7 @@ class jason : Application
           continue;
         }
         
-        Token("");
+        TokenNumber("");
         
         // number
         if (stream[idx] == "-")
@@ -453,6 +487,7 @@ class jason : Application
             offset = offset + 1;
           }
         }
+        NumberWritten();
         mode = stateStack.Pop();
         continue;
       }
