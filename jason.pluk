@@ -1,0 +1,375 @@
+import pluk.io;
+
+class jason : Application
+{
+  override void Main()
+  {
+    for (var x in Arguments.Skip(1))
+    {
+      scope (var fs = new FileStream(x))
+      {
+        StreamReader reader = new(fs);
+        List<String> input = new();
+        while (true)
+        {
+          var line = reader.ReadLineOrEof();
+          if (!?line)
+            break;
+          input.Add(~line);
+        }
+        var output = ProcessJson(input);
+        for (var line in output)
+        {
+          WriteLine(line);
+        }
+      }
+    }
+  }
+  
+  List<String> ProcessJson(List<String> input)
+  {
+    ValidateJson(input);
+    return input;
+  }
+  
+  void ValidateJson(List<String> input)
+  {
+    StringBuilder sb = new();
+    for (var line in input)
+    {
+      sb.Append(line);
+      sb.Append("\n");
+    }
+    
+    int line = 1;
+    int offset = 1;
+    Stack<int> stateStack = new();
+    List<String> stream = new(sb.ToString().Characters);
+    int mode = 0;
+    int idx = 0;
+    while(true)
+    {
+      if (idx == stream.Count)
+      {
+        if (mode == 2)
+          break;
+        throw new Exception("Unexpecte end of file. mode:" + mode);
+      }
+      if ((mode == 0) || (mode == 2)
+       || (mode == 3) || (mode == 31) || (mode == 32) || (mode == 33)
+       || (mode == 4) || (mode == 41)
+       || (mode == 5) || (mode == 6))
+      {
+        // whitespace eater
+        if ((stream[idx] == " ") || (stream[idx] == "\t"))
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          continue;
+        }
+        if (stream[idx] == "\n")
+        {
+          idx = idx + 1;
+          offset = 1;
+          line = line + 1;
+          continue;
+        }
+        if (stream[idx] == "#")
+        {
+          stateStack.Push(mode);
+          mode = 1;
+          continue;
+        }
+      }
+//      Console.WriteLine("mode: "+mode+" Char: "+stream[idx]+" Line: "+line+" Offset: "+offset);
+
+      if (mode == 0)
+      {
+        //initial mode
+        if (stream[idx] == "{")
+        {
+          stateStack.Push(2);
+          mode = 3;
+          idx = idx + 1;
+          offset = offset + 1;
+          line = line + 1;
+          continue;
+        }
+        if (stream[idx] == "[")
+        {
+          stateStack.Push(2);
+          mode = 4;
+          idx = idx + 1;
+          offset = offset + 1;
+          line = line + 1;
+          continue;
+        }
+        // starbound json normally doesn't include an immediate at toplevel, feel free to extend
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: '<value> expected.'");
+      }
+      if (mode == 1)
+      {
+        // comment line
+        if (stream[idx] == "\n")
+        {
+          idx = idx + 1;
+          offset = 1;
+          line = line + 1;
+          mode = stateStack.Pop();
+          continue;
+        }
+        idx = idx + 1;
+        offset = offset + 1;
+        continue;
+      }
+      if (mode == 2)
+      {
+        // end of document mode
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: 'End of document expected.'");
+      }
+      if (mode == 3)
+      {
+        // object mode
+        if (stream[idx] == "}")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          mode = stateStack.Pop();
+          continue;
+        }
+        if (stream[idx] == "\"")
+        {
+          stateStack.Push(31);
+          mode = 5;
+          continue;
+        }
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: '<string> or } expected.'");
+      }
+      if (mode == 31)
+      {
+        if (stream[idx] == ":")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          stateStack.Push(32);
+          mode = 6;
+          continue;
+        }
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: ': expected.'");
+      }
+      if (mode == 32)
+      {
+        if (stream[idx] == "}")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          mode = stateStack.Pop();
+          continue;
+        }
+        if (stream[idx] == ",")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          mode = 33;
+          continue;
+        }
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: ', or } expected.'");
+      }
+      if (mode == 33)
+      {
+        if (stream[idx] == "\"")
+        {
+          stateStack.Push(31);
+          mode = 5;
+          continue;
+        }
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: '<string> expected, maybe a dangling ',' on the previous line?'");
+      }
+      if (mode == 4)
+      {
+        // array mode
+        if (stream[idx] == "]")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          mode = stateStack.Pop();
+          continue;
+        }
+        stateStack.Push(41);
+        mode = 6;
+      }
+      if (mode == 41)
+      {
+        if (stream[idx] == "]")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          mode = stateStack.Pop();
+          continue;
+        }
+        if (stream[idx] == ",")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          stateStack.Push(41);
+          mode = 6;
+          continue;
+        }
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: '] or , expected, missing an , on the previous line maybe ?");
+      }
+      if (mode == 5)
+      {
+        // string mode
+        if (stream[idx] == "\"")
+        {
+          int startline = line;
+          int startoffset = offset;
+          idx = idx + 1;
+          offset = offset + 1;
+          bool escaped = false;
+          while (true)
+          {
+            if (idx == stream.Count)
+              throw new Exception("Unclosed string literal started at line: "+startline+" offset: "+startoffset);
+            if (stream[idx] == "\n")
+            {
+              idx = idx + 1;
+              offset = 1;
+              line = line + 1;
+              continue;
+            }
+            if (!escaped && (stream[idx] == "\\"))
+            {
+              idx = idx + 1;
+              offset = offset + 1;
+              escaped = true;
+              continue;
+            }
+            if (!escaped&& (stream[idx] == "\""))
+            {
+              idx = idx + 1;
+              offset = offset + 1;
+              break;
+            }
+            idx = idx + 1;
+            offset = offset + 1;
+            escaped = false;
+          }
+          mode = stateStack.Pop();
+          continue;
+        }
+        throw new Exception("Unexpected character: '"+stream[idx]+"' at line: "+line+" offset: "+offset+" Reason: '\" expected, malformed string constant.'");
+      }
+      if (mode == 6)
+      {
+        // value mode
+        if (stream[idx] == "{")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          mode = 3;
+          continue;
+        }
+        if (stream[idx] == "[")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          mode = 4;
+          continue;
+        }
+        if ((stream[idx] == "t") && (idx+4 <= stream.Count) && (stream[idx+1] == "r") && (stream[idx+2] == "u") && (stream[idx+3] == "e"))
+        {
+          idx = idx + 4;
+          offset = offset + 4;
+          mode = stateStack.Pop();
+          continue;
+        }
+        if ((stream[idx] == "f") && (idx+5 <= stream.Count) && (stream[idx+1] == "a") && (stream[idx+2] == "l") && (stream[idx+3] == "s") && (stream[idx+4] == "e"))
+        {
+          idx = idx + 5;
+          offset = offset + 5;
+          mode = stateStack.Pop();
+          continue;
+        }
+        if ((stream[idx] == "n") && (idx+4 <= stream.Count) && (stream[idx+1] == "u") && (stream[idx+2] == "l") && (stream[idx+3] == "l"))
+        {
+          idx = idx + 4;
+          offset = offset + 4;
+          mode = stateStack.Pop();
+          continue;
+        }
+        if (stream[idx] == "\"")
+        {
+          mode = 5;
+          continue;
+        }
+        
+        // number
+        if (stream[idx] == "-")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+        }
+        while ((stream[idx] == "0") ||
+          (stream[idx] == "1") ||
+          (stream[idx] == "2") ||
+          (stream[idx] == "3") ||
+          (stream[idx] == "4") ||
+          (stream[idx] == "5") ||
+          (stream[idx] == "6") ||
+          (stream[idx] == "7") ||
+          (stream[idx] == "8") ||
+          (stream[idx] == "9"))
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+        }
+        if (stream[idx] == ".")
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          while ((stream[idx] == "0") ||
+            (stream[idx] == "1") ||
+            (stream[idx] == "2") ||
+            (stream[idx] == "3") ||
+            (stream[idx] == "4") ||
+            (stream[idx] == "5") ||
+            (stream[idx] == "6") ||
+            (stream[idx] == "7") ||
+            (stream[idx] == "8") ||
+            (stream[idx] == "9"))
+          {
+            idx = idx + 1;
+            offset = offset + 1;
+          }
+        }
+        if ((stream[idx] == "e") || (stream[idx] == "E"))
+        {
+          idx = idx + 1;
+          offset = offset + 1;
+          if ((stream[idx] == "+") || (stream[idx] == "-"))
+          {
+            idx = idx + 1;
+            offset = offset + 1;
+          }
+          while ((stream[idx] == "0") ||
+            (stream[idx] == "1") ||
+            (stream[idx] == "2") ||
+            (stream[idx] == "3") ||
+            (stream[idx] == "4") ||
+            (stream[idx] == "5") ||
+            (stream[idx] == "6") ||
+            (stream[idx] == "7") ||
+            (stream[idx] == "8") ||
+            (stream[idx] == "9"))
+          {
+            idx = idx + 1;
+            offset = offset + 1;
+          }
+        }
+        mode = stateStack.Pop();
+        continue;
+      }
+    }
+  }
+}
