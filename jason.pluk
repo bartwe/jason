@@ -7,6 +7,7 @@ class jason : Application
     for (var x in Arguments.Skip(1))
     {
       List<String> input = new();
+      
       scope (var fs = new FileStream(x))
       {
         StreamReader reader = new(fs);
@@ -18,7 +19,16 @@ class jason : Application
           input.Add(~line);
         }
       }
-      var output = ProcessJson(input);
+      String output = "";
+      try
+      {
+        output = ProcessJson(input);
+      }
+      catch (Exception e)
+      {
+        WriteError("In file: "+x);
+        throw e;
+      }
       File.Delete(x);
       scope (var fs = new FileStream(x))
       {
