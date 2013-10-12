@@ -26,8 +26,8 @@ class jason : Application
       }
       catch (Exception e)
       {
-        WriteError("In file: "+x);
-        throw e;
+        WriteError("In file: "+x+"\n"+e+"\n");
+        continue;
       }
       File.Delete(x);
       scope (var fs = new FileStream(x))
@@ -173,6 +173,9 @@ class jason : Application
           Token("");
           stateStack.Push(mode);
           mode = 11;
+          Raw(stream[idx]);
+          idx = idx + 1;
+          offset = offset + 1;
           continue;
         }
       }
@@ -228,9 +231,6 @@ class jason : Application
         if (stream[idx] == "/")
         {
           mode = 1;
-          Raw(stream[idx]);
-          idx = idx + 1;
-          offset = offset + 1;
           continue;
         }
         if (stream[idx] == "*")
