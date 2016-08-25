@@ -1,4 +1,4 @@
 jason
 =====
 
-Starbound custom json pretty printer
+Custom json pretty printer written in pluklang
